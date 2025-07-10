@@ -54,15 +54,32 @@ def update_queries(user_id):
 def index():
     return render_template('index.html')
 
+@app.route('/guest')
+def guest():
+    session['guest'] = True
+    return redirect('/analyze')
+
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    if request.method == 'POST':
+        email = request.form['email']
+        user = get_user(email)
+        if user:
+            return 'Email already exists', 400
+        today = datetime.date.today().isoformat()
+        c.execute("INSERT INTO users (email, last_reset) VALUES (?, ?)", (email, today))
+        conn.commit()
+        session['email'] = email
+        return redirect('/subscribe')
+    return render_template('signup.html')
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         email = request.form['email']
         user = get_user(email)
         if not user:
-            today = datetime.date.today().isoformat()
-            c.execute("INSERT INTO users (email, last_reset) VALUES (?, ?)", (email, today))
-            conn.commit()
+            return 'User not found', 404
         session['email'] = email
         return redirect('/analyze')
     return render_template('login.html')
@@ -70,8 +87,11 @@ def login():
 @app.route('/analyze', methods=['GET', 'POST'])
 def analyze():
     is_admin = session.get('admin', False)
-    if is_admin:
+    is_guest = session.get('guest', False)
+    if is_admin or is_guest:
         if request.method == 'POST':
+            if is_guest:
+                return redirect('/signup')
             contract = request.form['contract']
             messages = [
                 {"role": "system", "content": "You are a contract analysis expert. Analyze for potential disputes, risks, and suggestions."},
