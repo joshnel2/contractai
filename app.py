@@ -5,6 +5,7 @@ import datetime
 import requests
 from flask import Flask, request, render_template, redirect, session, url_for
 import stripe
+from pypdf import PdfReader
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key_change_me'
@@ -92,7 +93,21 @@ def analyze():
         if request.method == 'POST':
             if is_guest:
                 return redirect('/signup')
-            contract = request.form['contract']
+            contract = ''
+            if 'file' in request.files:
+                file = request.files['file']
+                if file.filename.endswith('.pdf'):
+                    reader = PdfReader(file)
+                    for page in reader.pages:
+                        contract += page.extract_text() + '\n'
+                elif file.filename.endswith('.txt'):
+                    contract = file.read().decode('utf-8')
+                else:
+                    return 'Unsupported file type', 400
+            else:
+                contract = request.form.get('contract', '')
+            if not contract:
+                return 'No contract provided', 400
             messages = [
                 {"role": "system", "content": "You are a contract analysis expert. Analyze for potential disputes, risks, and suggestions."},
                 {"role": "user", "content": contract}
@@ -115,7 +130,21 @@ def analyze():
             if user['queries_used'] >= 20:
                 return redirect('/subscribe')
             if request.method == 'POST':
-                contract = request.form['contract']
+                contract = ''
+                if 'file' in request.files:
+                    file = request.files['file']
+                    if file.filename.endswith('.pdf'):
+                        reader = PdfReader(file)
+                        for page in reader.pages:
+                            contract += page.extract_text() + '\n'
+                    elif file.filename.endswith('.txt'):
+                        contract = file.read().decode('utf-8')
+                    else:
+                        return 'Unsupported file type', 400
+                else:
+                    contract = request.form.get('contract', '')
+                if not contract:
+                    return 'No contract provided', 400
                 messages = [
                     {"role": "system", "content": "You are a contract analysis expert. Analyze for potential disputes, risks, and suggestions."},
                     {"role": "user", "content": contract}
