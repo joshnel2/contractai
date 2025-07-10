@@ -1,3 +1,4 @@
+# app.py
 import os
 import sqlite3
 import datetime
@@ -13,12 +14,12 @@ STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY')
 STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY')
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET')
 GROK_API_KEY = os.environ.get('GROK_API_KEY')
-DOMAIN = 'https://contractai-lk5f.vercel.app/'  # Change to your domain
+DOMAIN = 'http://127.0.0.1:5000'  # Change to your domain
 
 stripe.api_key = STRIPE_SECRET_KEY
 
 # Database setup
-conn = sqlite3.connect('users.db', check_same_thread=False)
+conn = sqlite3.connect('/tmp/users.db', check_same_thread=False)
 c = conn.cursor()
 c.execute('''CREATE TABLE IF NOT EXISTS users 
              (id INTEGER PRIMARY KEY, email TEXT UNIQUE, subscribed INTEGER DEFAULT 0, 
