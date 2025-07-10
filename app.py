@@ -13,7 +13,7 @@ STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY')
 STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY')
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET')
 GROK_API_KEY = os.environ.get('GROK_API_KEY')
-DOMAIN = 'http://127.0.0.1:5000'  # Change to your domain
+DOMAIN = 'https://contractai-lk5f.vercel.app/'  # Change to your domain
 
 stripe.api_key = STRIPE_SECRET_KEY
 
