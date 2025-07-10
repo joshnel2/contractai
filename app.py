@@ -32,17 +32,21 @@ def get_user(email):
         return {'id': row[0], 'email': row[1], 'subscribed': row[2], 'queries_used': row[3], 'last_reset': row[4]}
     return None
 
-def update_queries(user_id):
-    c.execute("SELECT * FROM users WHERE id=?", (user_id,))
-    user = c.fetchone()
-    last_reset = datetime.date.fromisoformat(user[4]) if user[4] else datetime.date.today()
+def reset_if_needed(user):
+    if user['last_reset']:
+        last_reset = datetime.date.fromisoformat(user['last_reset'])
+    else:
+        last_reset = datetime.date.today()
+        user['last_reset'] = last_reset.isoformat()
     today = datetime.date.today()
     if (today.year > last_reset.year) or (today.month > last_reset.month):
-        queries = 1
-        last_reset = today.isoformat()
-    else:
-        queries = user[3] + 1
-    c.execute("UPDATE users SET queries_used=?, last_reset=? WHERE id=?", (queries, last_reset, user_id))
+        c.execute("UPDATE users SET queries_used=0, last_reset=? WHERE id=?", (today.isoformat(), user['id']))
+        conn.commit()
+        user['queries_used'] = 0
+    return user
+
+def update_queries(user_id):
+    c.execute("UPDATE users SET queries_used = queries_used + 1 WHERE id=?", (user_id,))
     conn.commit()
 
 @app.route('/')
@@ -55,7 +59,8 @@ def login():
         email = request.form['email']
         user = get_user(email)
         if not user:
-            c.execute("INSERT INTO users (email, last_reset) VALUES (?, ?)", (email, datetime.date.today().isoformat()))
+            today = datetime.date.today().isoformat()
+            c.execute("INSERT INTO users (email, last_reset) VALUES (?, ?)", (email, today))
             conn.commit()
         session['email'] = email
         return redirect('/analyze')
@@ -63,28 +68,49 @@ def login():
 
 @app.route('/analyze', methods=['GET', 'POST'])
 def analyze():
-    if 'email' not in session:
-        return redirect('/login')
-    user = get_user(session['email'])
     is_admin = session.get('admin', False)
-    if is_admin or user['subscribed']:
-        if not is_admin and user['queries_used'] >= 20:
-            return redirect('/subscribe')
+    if is_admin:
         if request.method == 'POST':
             contract = request.form['contract']
-            prompt = f"\n\nHuman: Analyze this contract for potential disputes, risks, and suggestions:\n{contract}\n\nAssistant:"
+            messages = [
+                {"role": "system", "content": "You are a contract analysis expert. Analyze for potential disputes, risks, and suggestions."},
+                {"role": "user", "content": contract}
+            ]
             headers = {'Authorization': f'Bearer {GROK_API_KEY}', 'Content-Type': 'application/json'}
-            data = {"model": "grok-4", "max_tokens_to_sample": 2000, "temperature": 0.7, "prompt": prompt}
-            resp = requests.post('https://api.x.ai/v1/complete', json=data, headers=headers)
+            data = {"model": "grok-beta", "messages": messages, "max_tokens": 2000, "temperature": 0.7}
+            resp = requests.post('https://api.x.ai/v1/chat/completions', json=data, headers=headers)
             if resp.status_code == 200:
-                analysis = resp.json().get('completion', 'Error in analysis.')
+                analysis = resp.json()['choices'][0]['message']['content']
             else:
-                analysis = 'API error.'
-            update_queries(user['id'])
+                analysis = 'API error: ' + resp.text
             return render_template('analyze.html', analysis=analysis)
         return render_template('analyze.html')
     else:
-        return redirect('/subscribe')
+        if 'email' not in session:
+            return redirect('/login')
+        user = get_user(session['email'])
+        user = reset_if_needed(user)
+        if user['subscribed']:
+            if user['queries_used'] >= 20:
+                return redirect('/subscribe')
+            if request.method == 'POST':
+                contract = request.form['contract']
+                messages = [
+                    {"role": "system", "content": "You are a contract analysis expert. Analyze for potential disputes, risks, and suggestions."},
+                    {"role": "user", "content": contract}
+                ]
+                headers = {'Authorization': f'Bearer {GROK_API_KEY}', 'Content-Type': 'application/json'}
+                data = {"model": "grok-beta", "messages": messages, "max_tokens": 2000, "temperature": 0.7}
+                resp = requests.post('https://api.x.ai/v1/chat/completions', json=data, headers=headers)
+                if resp.status_code == 200:
+                    analysis = resp.json()['choices'][0]['message']['content']
+                else:
+                    analysis = 'API error: ' + resp.text
+                update_queries(user['id'])
+                return render_template('analyze.html', analysis=analysis)
+            return render_template('analyze.html')
+        else:
+            return redirect('/subscribe')
 
 @app.route('/subscribe')
 def subscribe():
@@ -114,7 +140,8 @@ def subscribe():
 @app.route('/success')
 def success():
     if 'email' in session:
-        c.execute("UPDATE users SET subscribed=1, queries_used=0, last_reset=? WHERE email=?", (datetime.date.today().isoformat(), session['email']))
+        today = datetime.date.today().isoformat()
+        c.execute("UPDATE users SET subscribed=1, queries_used=0, last_reset=? WHERE email=?", (today, session['email']))
         conn.commit()
     return redirect('/analyze')
 
